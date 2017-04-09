@@ -1,0 +1,13 @@
+[package]
+name = "libshft"
+version = "0.1.0"
+authors = ["Phil Turnbull <philip.turnbull@gmail.com>"]
+
+[lib]
+name = "libshft"
+
+[dependencies]
+rand = "0.3"
+serde = "0"
+serde_yaml = "0"
+serde_derive = ""

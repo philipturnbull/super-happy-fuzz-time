@@ -1,0 +1,15 @@
+[package]
+name = "shftafl"
+version = "0.1.0"
+authors = ["Phil Turnbull <philip.turnbull@gmail.com>"]
+
+[lib]
+name = "shftafl"
+crate-type = ["dylib"]
+
+[dependencies]
+rand = "0.3"
+libc = ""
+
+[dependencies.libshft]
+path = "../libshft"

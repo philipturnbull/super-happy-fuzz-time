@@ -1,0 +1,11 @@
+[package]
+name = "super-happy-fuzz-time"
+version = "0.1.0"
+authors = ["Phil Turnbull <philip.turnbull@gmail.com>"]
+
+[dependencies]
+clap = "2.23.2"
+rand = "0.3"
+
+[dependencies.libshft]
+path = "../libshft"
