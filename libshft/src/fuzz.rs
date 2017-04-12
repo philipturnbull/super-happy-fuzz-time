@@ -17,6 +17,7 @@ pub enum FuzzAction {
     DuplicateRootNode,
     RemoveDelim,
     ShuffleRanges,
+    SwapDelim,
     SwapRanges,
 }
 
@@ -27,6 +28,7 @@ impl Rand for FuzzAction {
             FuzzAction::DuplicateRootNode,
             FuzzAction::RemoveDelim,
             FuzzAction::ShuffleRanges,
+            FuzzAction::SwapDelim,
             FuzzAction::SwapRanges,
         ];
         rng.choose(&actions).unwrap().clone()
@@ -168,6 +170,13 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
             nodes[index] = Node::Range(rangeref);
         }
     }
+
+    pub fn swap_delim<R: Rng>(self: &mut Self, mut rng: &mut R) {
+        if let Some((index, start_pattern, rangeref, end_pattern)) = rand_delim(&mut rng, &self.nodes[..]) {
+            let mut nodes = self.nodes.to_mut();
+            nodes[index] = Node::Delim(end_pattern, rangeref, start_pattern);
+        }
+    }
 }
 
 pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> Vec<u8> {
@@ -178,6 +187,7 @@ pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutati
             FuzzAction::DuplicateRootNode => ff.duplicate_root_node(&mut rng),
             FuzzAction::RemoveDelim => ff.remove_delim(&mut rng),
             FuzzAction::ShuffleRanges => ff.shuffle_range(&mut rng),
+            FuzzAction::SwapDelim => ff.swap_delim(&mut rng),
             FuzzAction::SwapRanges => ff.swap_ranges(&mut rng),
         }
     }
