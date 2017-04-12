@@ -15,6 +15,7 @@ pub struct FuzzFile<'buf: 'parse, 'parse> {
 pub enum FuzzAction {
     DuplicateRange,
     DuplicateRootNode,
+    RemoveDelim,
     ShuffleRanges,
     SwapRanges,
 }
@@ -24,6 +25,7 @@ impl Rand for FuzzAction {
         let actions = vec![
             FuzzAction::DuplicateRange,
             FuzzAction::DuplicateRootNode,
+            FuzzAction::RemoveDelim,
             FuzzAction::ShuffleRanges,
             FuzzAction::SwapRanges,
         ];
@@ -34,6 +36,18 @@ impl Rand for FuzzAction {
 fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> (usize, usize) {
     let indices = rand::sample(&mut rng, 0..x.len(), 2);
     (indices[0], indices[1])
+}
+
+fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(usize, &'buf [u8], RangeRef, &'buf [u8])> {
+    let delims: Vec<_> = nodes.iter().enumerate().filter_map(|item| {
+        match item {
+            (index, &Node::Delim(start_pattern, rangeref, end_pattern)) => {
+                Some((index, start_pattern, rangeref, end_pattern))
+            },
+            _ => None,
+        }
+    }).collect();
+    rng.choose(&delims[..]).cloned()
 }
 
 struct SerializeState {
@@ -147,6 +161,13 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
             nodes[dst_index] = Node::Range(rangeref);
         }
     }
+
+    pub fn remove_delim<R: Rng>(self: &mut Self, mut rng: &mut R) {
+        if let Some((index, _, rangeref, _)) = rand_delim(&mut rng, &self.nodes[..]) {
+            let mut nodes = self.nodes.to_mut();
+            nodes[index] = Node::Range(rangeref);
+        }
+    }
 }
 
 pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> Vec<u8> {
@@ -155,6 +176,7 @@ pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutati
         match rng.gen() {
             FuzzAction::DuplicateRange => ff.duplicate_range(&mut rng),
             FuzzAction::DuplicateRootNode => ff.duplicate_root_node(&mut rng),
+            FuzzAction::RemoveDelim => ff.remove_delim(&mut rng),
             FuzzAction::ShuffleRanges => ff.shuffle_range(&mut rng),
             FuzzAction::SwapRanges => ff.swap_ranges(&mut rng),
         }
