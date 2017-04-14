@@ -68,15 +68,21 @@ fn main() {
             .help("File to fuzz")
             .required(true)
             .index(1))
+        .arg(Arg::with_name("CONFIG")
+            .help("Config file")
+            .long("config")
+            .number_of_values(1)
+            .required(true))
         .arg(Arg::with_name("dump")
             .help("Dump input file")
             .long("dump"))
         .get_matches();
 
-    let filename = matches.value_of("INPUT").unwrap();
+    let input_filename = matches.value_of("INPUT").unwrap();
+    let config_filename = matches.value_of("CONFIG").unwrap();
 
-    if let Ok(buf) = read_file(filename) {
-        let grammar = Grammar::from_path("config.yml");
+    if let Ok(buf) = read_file(input_filename) {
+        let grammar = Grammar::from_path(config_filename);
         let parsed = slurp(&grammar, &buf);
 
         if matches.occurrences_of("dump") != 0 {
