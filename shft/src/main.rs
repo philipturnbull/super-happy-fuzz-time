@@ -14,42 +14,47 @@ use libshft::parse::slurp;
 use libshft::fuzz::fuzz_one;
 
 #[cfg(test)]
-fn roundtrip(grammar: &Grammar, buf: &[u8]) -> bool {
-    let parsed_file = slurp(grammar, buf);
-    let ff = FuzzFile::new(&parsed_file);
-    println!("parsed_file = {:#?}", parsed_file);
-    let serialized = ff.serialize();
-    println!("serialized = {:#?}", serialized);
-    serialized == buf
-}
+mod test {
+    use libshft::grammar::{Grammar, GrammarDef};
+    use libshft::parse::slurp;
+    use libshft::fuzz::FuzzFile;
 
-#[test]
-fn test_tokenizer() {
-    let grammar = Grammar::new(vec![GrammarDef::Tokenizer(vec![b' '])]);
-    let buf = b"1 2 3";
-    assert!(roundtrip(&grammar, buf))
-}
+    fn roundtrip(grammar: &Grammar, buf: &[u8]) -> bool {
+        let parsed_file = slurp(grammar, buf);
+        let mut x = String::new();
+        parsed_file.dump(&mut x).expect("parsed_file.dump");
+        println!("parsed = {:?}", x);
+        let ff = FuzzFile::new(&parsed_file);
+        let serialized = ff.serialize();
+        println!("serialized = {:#?}", serialized);
+        serialized == buf
+    }
 
-#[test]
-fn test_two_tokenizers() {
-    let grammar = Grammar::new(vec![
-        GrammarDef::Tokenizer(vec![b' ']),
-        GrammarDef::Tokenizer(vec![b'|']),
-    ]);
-    let buf = b"1 2|3 |4";
-    assert!(roundtrip(&grammar, buf))
-}
+    #[test]
+    fn test_whitespace() {
+        let grammar = Grammar::new(vec![], vec![b" ".to_vec()]);
+        let buf = b"1 2 3";
+        assert!(roundtrip(&grammar, buf))
+    }
 
-#[test]
-fn test_delim() {
-    let grammar = Grammar::new(vec![
-        GrammarDef::Delim(vec![b'<', b'<'], vec![b'>', b'>']),
-    ]);
-    assert!(roundtrip(&grammar, b"1<<2<<3>>4>>5"));
-    assert!(roundtrip(&grammar, b"1<<2<<3>>4"));
-    assert!(roundtrip(&grammar, b"1<<2>>3>>4"));
-    assert!(roundtrip(&grammar, b"1<<2"));
-    assert!(roundtrip(&grammar, b"1>>2"));
+    #[test]
+    fn test_two_whitespaces() {
+        let grammar = Grammar::new(vec![], vec![b" ".to_vec(), b"\r\n".to_vec()]);
+        let buf = b"1 2\r\n3 \r\n4";
+        assert!(roundtrip(&grammar, buf))
+    }
+
+    #[test]
+    fn test_delim() {
+        let grammar = Grammar::new(vec![
+            GrammarDef::Delim(vec![b'<', b'<'], vec![b'>', b'>']),
+        ], vec![]);
+        assert!(roundtrip(&grammar, b"1<<2<<3>>4>>5"));
+        assert!(roundtrip(&grammar, b"1<<2<<3>>4"));
+        assert!(roundtrip(&grammar, b"1<<2>>3>>4"));
+        assert!(roundtrip(&grammar, b"1<<2"));
+        assert!(roundtrip(&grammar, b"1>>2"));
+    }
 }
 
 fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
