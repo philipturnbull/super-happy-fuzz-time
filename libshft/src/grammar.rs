@@ -9,12 +9,11 @@ use std::path::Path;
 struct ConfigFormat {
     delims: Vec<(String, String)>,
     breaks: Vec<String>,
-    tokens: Vec<String>,
+    whitespace: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum GrammarDef {
-    Tokenizer(Vec<u8>),
     Breaker(Vec<u8>),
     Delim(Vec<u8>, Vec<u8>),
 }
@@ -22,12 +21,14 @@ pub enum GrammarDef {
 #[derive(Debug)]
 pub struct Grammar {
     pub defs: Vec<GrammarDef>,
+    pub whitespace: Vec<Vec<u8>>,
 }
 
 impl Grammar {
-    pub fn new(defs: Vec<GrammarDef>) -> Self {
+    pub fn new(defs: Vec<GrammarDef>, whitespace: Vec<Vec<u8>>) -> Self {
         Grammar {
             defs: defs,
+            whitespace: whitespace,
         }
     }
 
@@ -39,19 +40,20 @@ impl Grammar {
         let cfg = serde_yaml::from_str::<ConfigFormat>(&s).unwrap();
 
         let mut defs = Vec::new();
+        let mut whitespace = Vec::new();
 
         for (start_pattern, end_pattern) in cfg.delims {
             defs.push(GrammarDef::Delim(start_pattern.into_bytes(), end_pattern.into_bytes()));
         }
 
-        for pattern in cfg.tokens {
-            defs.push(GrammarDef::Tokenizer(pattern.into_bytes()))
+        for pattern in cfg.whitespace {
+            whitespace.push(pattern.into_bytes())
         }
 
         for pattern in cfg.breaks {
             defs.push(GrammarDef::Breaker(pattern.into_bytes()))
         }
 
-        Grammar::new(defs)
+        Grammar::new(defs, whitespace)
     }
 }

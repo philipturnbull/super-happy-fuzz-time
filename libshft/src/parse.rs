@@ -7,7 +7,7 @@ pub type RangeRef = usize;
 #[derive(Debug)]
 enum Match<'buf> {
     Break(&'buf [u8], &'buf [u8]),
-    Tokenizer(&'buf [u8], &'buf [u8], &'buf [u8]),
+    Whitespace(&'buf [u8], &'buf [u8], &'buf [u8]),
     DelimStart(&'buf [u8], &'buf [u8], Vec<u8>, &'buf [u8]),
     DelimEnd(&'buf [u8], &'buf [u8], &'buf [u8]),
 }
@@ -214,8 +214,43 @@ impl<'buf> TreeBuilder<'buf> {
     }
 }
 
+fn starts_with_any_pattern<'a, 'buf>(patterns: &'a [Vec<u8>], buf: &'buf [u8]) -> Option<&'a [u8]> {
+    for pattern in patterns {
+        if buf.starts_with(pattern) {
+            return Some(&pattern[..])
+        }
+    }
+    None
+}
+
+fn scan_whitespace<'buf>(whitespace: &[Vec<u8>], buf: &'buf [u8]) -> Option<(&'buf [u8], &'buf [u8])> {
+    assert!(!buf.is_empty());
+
+    let mut i = 0;
+    while i < buf.len() {
+        match starts_with_any_pattern(whitespace, &buf[i..]) {
+            Some(pattern) => {
+                i += pattern.len()
+            },
+            None => {
+                break
+            }
+        }
+    }
+
+    if i > 0 {
+        Some((&buf[..i], &buf[i..]))
+    } else {
+        None
+    }
+}
+
 fn scan_next<'buf, 'cfg>(grammar: &'cfg Grammar, buf: &'buf [u8]) -> Match<'buf> {
     for (i, _) in buf.iter().enumerate() {
+        if let Some((whitespace, remainder)) = scan_whitespace(&grammar.whitespace[..], &buf[i..]) {
+            return Match::Whitespace(&buf[..i], whitespace, remainder)
+        }
+
         for def in &grammar.defs {
             match *def {
                 GrammarDef::Delim(ref start_pattern, ref end_pattern) => {
@@ -223,11 +258,6 @@ fn scan_next<'buf, 'cfg>(grammar: &'cfg Grammar, buf: &'buf [u8]) -> Match<'buf>
                         return Match::DelimStart(&buf[..i], &buf[i..i+start_pattern.len()], end_pattern.clone(), &buf[i+start_pattern.len()..])
                     } else if buf[i..].starts_with(end_pattern) {
                         return Match::DelimEnd(&buf[..i], &buf[i..i+end_pattern.len()], &buf[i+end_pattern.len()..])
-                    }
-                },
-                GrammarDef::Tokenizer(ref pattern) => {
-                    if buf[i..].starts_with(pattern) {
-                        return Match::Tokenizer(&buf[..i], &buf[i..i+pattern.len()], &buf[i+pattern.len()..])
                     }
                 },
                 GrammarDef::Breaker(ref pattern) => {
@@ -249,7 +279,7 @@ pub fn slurp<'buf>(grammar: &Grammar, buf: &'buf [u8]) -> ParsedFile<'buf> {
     while !remainder.is_empty() {
         let token_match = scan_next(grammar, remainder);
         remainder = match token_match {
-            Match::Tokenizer(prefix, token, remainder) => {
+            Match::Whitespace(prefix, token, remainder) => {
                 builder.push_token(prefix);
                 builder.push_token(token);
                 remainder

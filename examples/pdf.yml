@@ -12,8 +12,9 @@ delims:
   - 
     - "stream"
     - "endstream"
-tokens: 
+whitespace:
   - "\n"
+  - "\r"
   - "\t"
   - " "
 breaks:
