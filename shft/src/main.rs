@@ -12,6 +12,7 @@ use std::io::{Read, Write};
 use std::fs::File;
 use std::path::Path;
 use std::process;
+use std::str::FromStr;
 use libshft::grammar::Grammar;
 use libshft::parse::{ParsedFile, slurp};
 use libshft::fuzz::fuzz_one;
@@ -74,7 +75,7 @@ fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, iterat
     for i in 0..iterations {
         let fuzzed = fuzz_one(parsed_file, &mut rng, 5);
 
-        let out_filename = pattern.with(i);
+        let out_filename = pattern.with(i+1);
         let mut file = File::create(out_filename).expect("oops");
         file.write_all(&fuzzed[..]).expect("oops")
     }
@@ -121,6 +122,12 @@ fn go() -> i32 {
                     .long("output")
                     .short("o")
                     .number_of_values(1)
+                    .required(true))
+                .arg(Arg::with_name("ITERATIONS")
+                    .help("Number of files to generate")
+                    .long("num")
+                    .short("n")
+                    .number_of_values(1)
                     .required(true)));
 
     let matches = app.clone().get_matches();
@@ -137,11 +144,15 @@ fn go() -> i32 {
         },
         ("fuzz", Some(fuzz_matches)) => {
             let output = lookup(fuzz_matches, "OUTPUT");
+            let num_iterations = match usize::from_str(lookup(fuzz_matches, "ITERATIONS")) {
+                Ok(n) => n,
+                Err(err) => return die(&app, format!("Invalid iterations: {}", err)),
+            };
             match OutputPattern::from_path(output) {
                 Some(pattern) => {
                     let buf = read_file(input_filename).expect("read_file");
                     let parsed_file = parse_input_file(config_filename, &buf[..]);
-                    do_fuzz(&parsed_file, &pattern, 10);
+                    do_fuzz(&parsed_file, &pattern, num_iterations);
                     0
                 },
                 None => {
