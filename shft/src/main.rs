@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::fs::File;
 use std::path::Path;
 use libshft::grammar::Grammar;
-use libshft::parse::slurp;
+use libshft::parse::{ParsedFile, slurp};
 use libshft::fuzz::fuzz_one;
 
 #[cfg(test)]
@@ -65,6 +65,17 @@ fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     }
 }
 
+fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>) {
+    let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
+    for i in 0..50000 {
+        let fuzzed = fuzz_one(parsed_file, &mut rng, 5);
+
+        let out_filename = format!("out/{}.pdf", i);
+        let mut file = File::create(out_filename).expect("oops");
+        file.write_all(&fuzzed[..]).expect("oops")
+    }
+}
+
 fn main() {
     let matches = App::new("super-happy-fuzz-time")
         .arg(Arg::with_name("INPUT")
@@ -86,19 +97,12 @@ fn main() {
 
     if let Ok(buf) = read_file(input_filename) {
         let grammar = Grammar::from_path(config_filename);
-        let parsed = slurp(&grammar, &buf);
+        let parsed_file = slurp(&grammar, &buf);
 
         if matches.occurrences_of("dump") != 0 {
-            println!("{}", parsed.dump());
+            println!("{}", parsed_file.dump());
         } else {
-            let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
-            for i in 0..50000 {
-                let fuzzed = fuzz_one(&parsed, &mut rng, 5);
-
-                let out_filename = format!("out/{}.pdf", i);
-                let mut file = File::create(out_filename).expect("oops");
-                file.write_all(&fuzzed[..]).expect("oops")
-            }
+            do_fuzz(&parsed_file);
         }
     }
 }
