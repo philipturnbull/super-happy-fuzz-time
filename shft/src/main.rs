@@ -21,9 +21,7 @@ mod test {
 
     fn roundtrip(grammar: &Grammar, buf: &[u8]) -> bool {
         let parsed_file = slurp(grammar, buf);
-        let mut x = String::new();
-        parsed_file.dump(&mut x).expect("parsed_file.dump");
-        println!("parsed = {:?}", x);
+        println!("parsed = {:?}", parsed_file.dump());
         let ff = FuzzFile::new(&parsed_file);
         let serialized = ff.serialize();
         println!("serialized = {:#?}", serialized);
@@ -91,9 +89,7 @@ fn main() {
         let parsed = slurp(&grammar, &buf);
 
         if matches.occurrences_of("dump") != 0 {
-            let mut x = String::new();
-            parsed.dump(&mut x).expect("parsed.dump");
-            println!("{}", x);
+            println!("{}", parsed.dump());
         } else {
             let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
             for i in 0..50000 {

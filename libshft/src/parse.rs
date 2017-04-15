@@ -94,11 +94,12 @@ impl<'buf> ParsedFile<'buf> {
         }
     }
 
-    pub fn dump(self: &Self, f: &mut fmt::Write) -> fmt::Result {
+    pub fn dump(self: &Self) -> String {
+        let mut s = String::new();
         for noderef in &self.root {
-            self.dump_noderef(0, *noderef, f)?
+            self.dump_noderef(0, *noderef, &mut s).expect("ParsedFile.dump");
         }
-        Ok(())
+        s
     }
 }
 
