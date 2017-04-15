@@ -4,7 +4,7 @@ extern crate libshft;
 
 mod output;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, ArgMatches, App, SubCommand};
 use rand::SeedableRng;
 use rand::isaac;
 use std::io;
@@ -92,6 +92,10 @@ fn die<S: AsRef<str>>(app: &App, msg: S) -> i32 {
     1
 }
 
+fn lookup<'a>(matches: &'a ArgMatches, key: &str) -> &'a str {
+    matches.value_of(key).expect("impossible")
+}
+
 fn go() -> i32 {
     let app = App::new("super-happy-fuzz-time")
         .arg(Arg::with_name("INPUT")
@@ -121,8 +125,8 @@ fn go() -> i32 {
 
     let matches = app.clone().get_matches();
 
-    let config_filename = matches.value_of("CONFIG").expect("impossible");
-    let input_filename = matches.value_of("INPUT").expect("impossible");
+    let config_filename = lookup(&matches, "CONFIG");
+    let input_filename = lookup(&matches, "INPUT");
 
     match matches.subcommand() {
         ("dump", _) => {
@@ -132,7 +136,7 @@ fn go() -> i32 {
             0
         },
         ("fuzz", Some(fuzz_matches)) => {
-            let output = fuzz_matches.value_of("OUTPUT").expect("impossible");
+            let output = lookup(fuzz_matches, "OUTPUT");
             match OutputPattern::from_path(output) {
                 Some(pattern) => {
                     let buf = read_file(input_filename).expect("read_file");
