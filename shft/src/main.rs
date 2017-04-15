@@ -2,6 +2,8 @@ extern crate clap;
 extern crate rand;
 extern crate libshft;
 
+mod output;
+
 use clap::{Arg, App, SubCommand};
 use rand::SeedableRng;
 use rand::isaac;
@@ -9,9 +11,11 @@ use std::io;
 use std::io::{Read, Write};
 use std::fs::File;
 use std::path::Path;
+use std::process;
 use libshft::grammar::Grammar;
 use libshft::parse::{ParsedFile, slurp};
 use libshft::fuzz::fuzz_one;
+use output::OutputPattern;
 
 #[cfg(test)]
 mod test {
@@ -65,12 +69,12 @@ fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     }
 }
 
-fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, iterations: usize) {
+fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, iterations: usize) {
     let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
     for i in 0..iterations {
         let fuzzed = fuzz_one(parsed_file, &mut rng, 5);
 
-        let out_filename = format!("out/{}.pdf", i);
+        let out_filename = pattern.with(i);
         let mut file = File::create(out_filename).expect("oops");
         file.write_all(&fuzzed[..]).expect("oops")
     }
@@ -81,7 +85,14 @@ fn parse_input_file<'buf>(config_filename: &str, buf: &'buf [u8]) -> ParsedFile<
     slurp(&grammar, buf)
 }
 
-fn main() {
+fn die<S: AsRef<str>>(app: &App, msg: S) -> i32 {
+    let mut out = io::stdout();
+    app.write_help(&mut out).expect("app.write_help");
+    write!(out, "\n\n{}\n", msg.as_ref()).expect("write newline");
+    1
+}
+
+fn go() -> i32 {
     let app = App::new("super-happy-fuzz-time")
         .arg(Arg::with_name("INPUT")
             .help("File to fuzz")
@@ -100,7 +111,14 @@ fn main() {
                 .help("Parse and dump input file"))
         .subcommand(
             SubCommand::with_name("fuzz")
-                .help("Fuzz input file"));
+                .help("Fuzz input file")
+                .arg(Arg::with_name("OUTPUT")
+                    .help("Output pattern")
+                    .long("output")
+                    .short("o")
+                    .number_of_values(1)
+                    .required(true)));
+
     let matches = app.clone().get_matches();
 
     let config_filename = matches.value_of("CONFIG").expect("impossible");
@@ -111,16 +129,28 @@ fn main() {
             let buf = read_file(input_filename).expect("read_file");
             let parsed_file = parse_input_file(config_filename, &buf[..]);
             println!("{}", parsed_file.dump());
+            0
         },
-        ("fuzz", _) => {
-            let buf = read_file(input_filename).expect("read_file");
-            let parsed_file = parse_input_file(config_filename, &buf[..]);
-            do_fuzz(&parsed_file, 10);
+        ("fuzz", Some(fuzz_matches)) => {
+            let output = fuzz_matches.value_of("OUTPUT").expect("impossible");
+            match OutputPattern::from_path(output) {
+                Some(pattern) => {
+                    let buf = read_file(input_filename).expect("read_file");
+                    let parsed_file = parse_input_file(config_filename, &buf[..]);
+                    do_fuzz(&parsed_file, &pattern, 10);
+                    0
+                },
+                None => {
+                    die(&app, format!("'{}' is an invalid output pattern", output))
+                }
+            }
         },
         _ => {
-                let mut out = io::stdout();
-                app.write_help(&mut out).expect("app.write_help");
-                write!(out, "\n\nMust provide 'dump' or 'fuzz'\n").expect("write newline");
+            die(&app, "Must provide 'dump' or 'fuzz'")
         },
     }
+}
+
+fn main() {
+    process::exit(go());
 }
