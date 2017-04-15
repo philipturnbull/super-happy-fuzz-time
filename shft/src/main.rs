@@ -2,7 +2,7 @@ extern crate clap;
 extern crate rand;
 extern crate libshft;
 
-use clap::{Arg, App};
+use clap::{Arg, App, SubCommand};
 use rand::SeedableRng;
 use rand::isaac;
 use std::io;
@@ -65,9 +65,9 @@ fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     }
 }
 
-fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>) {
+fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, iterations: usize) {
     let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
-    for i in 0..50000 {
+    for i in 0..iterations {
         let fuzzed = fuzz_one(parsed_file, &mut rng, 5);
 
         let out_filename = format!("out/{}.pdf", i);
@@ -76,33 +76,51 @@ fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>) {
     }
 }
 
+fn parse_input_file<'buf>(config_filename: &str, buf: &'buf [u8]) -> ParsedFile<'buf> {
+    let grammar = Grammar::from_path(config_filename);
+    slurp(&grammar, buf)
+}
+
 fn main() {
-    let matches = App::new("super-happy-fuzz-time")
+    let app = App::new("super-happy-fuzz-time")
         .arg(Arg::with_name("INPUT")
             .help("File to fuzz")
-            .required(true)
-            .index(1))
+            .long("input")
+            .short("i")
+            .number_of_values(1)
+            .required(true))
         .arg(Arg::with_name("CONFIG")
             .help("Config file")
             .long("config")
+            .short("c")
             .number_of_values(1)
             .required(true))
-        .arg(Arg::with_name("dump")
-            .help("Dump input file")
-            .long("dump"))
-        .get_matches();
+        .subcommand(
+            SubCommand::with_name("dump")
+                .help("Parse and dump input file"))
+        .subcommand(
+            SubCommand::with_name("fuzz")
+                .help("Fuzz input file"));
+    let matches = app.clone().get_matches();
 
-    let input_filename = matches.value_of("INPUT").unwrap();
-    let config_filename = matches.value_of("CONFIG").unwrap();
+    let config_filename = matches.value_of("CONFIG").expect("impossible");
+    let input_filename = matches.value_of("INPUT").expect("impossible");
 
-    if let Ok(buf) = read_file(input_filename) {
-        let grammar = Grammar::from_path(config_filename);
-        let parsed_file = slurp(&grammar, &buf);
-
-        if matches.occurrences_of("dump") != 0 {
+    match matches.subcommand() {
+        ("dump", _) => {
+            let buf = read_file(input_filename).expect("read_file");
+            let parsed_file = parse_input_file(config_filename, &buf[..]);
             println!("{}", parsed_file.dump());
-        } else {
-            do_fuzz(&parsed_file);
-        }
+        },
+        ("fuzz", _) => {
+            let buf = read_file(input_filename).expect("read_file");
+            let parsed_file = parse_input_file(config_filename, &buf[..]);
+            do_fuzz(&parsed_file, 10);
+        },
+        _ => {
+                let mut out = io::stdout();
+                app.write_help(&mut out).expect("app.write_help");
+                write!(out, "\n\nMust provide 'dump' or 'fuzz'\n").expect("write newline");
+        },
     }
 }
