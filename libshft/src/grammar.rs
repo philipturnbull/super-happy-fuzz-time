@@ -3,7 +3,6 @@ extern crate serde_yaml;
 
 use std::fs::File;
 use std::io;
-use std::io::Read;
 use std::path::Path;
 
 #[derive(Deserialize)]
@@ -34,11 +33,8 @@ impl Grammar {
     }
 
     pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Grammar> {
-        let mut f = File::open(path)?;
-        let mut s = String::new();
-        f.read_to_string(&mut s).expect("read_to_string");
-
-        let cfg = serde_yaml::from_str::<ConfigFormat>(&s).unwrap();
+        let f = File::open(path)?;
+        let cfg = serde_yaml::from_reader::<_, ConfigFormat>(f).unwrap();
 
         let mut defs = Vec::new();
         let mut whitespace = Vec::new();
