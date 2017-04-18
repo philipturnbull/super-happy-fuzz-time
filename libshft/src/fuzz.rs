@@ -77,6 +77,16 @@ impl SerializeState {
     }
 }
 
+pub trait SerializeInto {
+    fn push(&mut self, &[u8]);
+}
+
+impl SerializeInto for Vec<u8> {
+    fn push(self: &mut Self, token: &[u8]) {
+        self.extend(token);
+    }
+}
+
 impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
     pub fn new(parsed: &'parse ParsedFile<'buf>) -> Self {
         FuzzFile {
@@ -86,39 +96,36 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
         }
     }
 
-    fn serialize_noderef(self: &Self, noderef: NodeRef, mut state: &mut SerializeState, mut out: &mut Vec<u8>) {
+    fn serialize_noderef<S: SerializeInto>(self: &Self, noderef: NodeRef, mut state: &mut SerializeState, mut out: &mut S) {
         match self.nodes[noderef] {
             Node::Delim(prefix, rangeref, postfix) => {
-                out.extend(prefix);
+                out.push(prefix);
                 if state.should_serialize(rangeref) {
                     for noderef in &self.ranges[rangeref] {
-                        self.serialize_noderef(*noderef, &mut state, &mut out)
+                        self.serialize_noderef(*noderef, &mut state, out)
                     }
                     state.reset(rangeref);
                 }
-                out.extend(postfix);
+                out.push(postfix);
             },
             Node::Range(rangeref) => {
                 if state.should_serialize(rangeref) {
                     for noderef in &self.ranges[rangeref] {
-                        self.serialize_noderef(*noderef, &mut state, &mut out)
+                        self.serialize_noderef(*noderef, &mut state, out)
                     }
                     state.reset(rangeref);
                 }
             },
-            Node::Token(token) => out.extend(token),
+            Node::Token(token) => out.push(token),
         }
     }
 
-    pub fn serialize(self: &Self) -> Vec<u8> {
-        let mut out = Vec::new();
+    pub fn serialize<S: SerializeInto>(self: &Self, out: &mut S) {
         let mut state = SerializeState::new(&self.ranges[..]);
 
         for noderef in self.root.iter() {
-            self.serialize_noderef(*noderef, &mut state, &mut out);
+            self.serialize_noderef(*noderef, &mut state, out);
         }
-
-        out
     }
 
     pub fn swap_ranges<R: Rng>(self: &mut Self, rng: &mut R) {
@@ -179,7 +186,7 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
     }
 }
 
-pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> Vec<u8> {
+pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> FuzzFile<'buf, 'parse> {
     let mut ff = FuzzFile::new(parsed);
     for _ in 0..mutations {
         match rng.gen() {
@@ -191,5 +198,6 @@ pub fn fuzz_one<'buf, R: Rng>(parsed: &ParsedFile<'buf>, mut rng: &mut R, mutati
             FuzzAction::SwapRanges => ff.swap_ranges(&mut rng),
         }
     }
-    ff.serialize()
+
+    ff
 }
