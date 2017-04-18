@@ -100,11 +100,6 @@ fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, num_it
     }
 }
 
-fn parse_input_file<'buf>(config_filename: &str, buf: &'buf [u8]) -> ParsedFile<'buf> {
-    let grammar = Grammar::from_path(config_filename);
-    slurp(&grammar, buf)
-}
-
 fn die<S: AsRef<str>>(app: &App, msg: S) -> i32 {
     let mut out = io::stdout();
     app.write_help(&mut out).expect("app.write_help");
@@ -154,10 +149,15 @@ fn go() -> i32 {
     let config_filename = lookup(&matches, "CONFIG");
     let input_filename = lookup(&matches, "INPUT");
 
+    let grammar = match Grammar::from_path(config_filename) {
+        Ok(grammar) => grammar,
+        Err(err) => return die(&app, format!("Could not parse {}: {}", config_filename, err)),
+    };
+
     match matches.subcommand() {
         ("dump", _) => {
             let buf = read_file(input_filename).expect("read_file");
-            let parsed_file = parse_input_file(config_filename, &buf[..]);
+            let parsed_file = slurp(&grammar, &buf);
             println!("{}", parsed_file.dump());
             0
         },
@@ -175,7 +175,7 @@ fn go() -> i32 {
                         valid_actions: fuzz::default_mutations(),
                     };
                     let buf = read_file(input_filename).expect("read_file");
-                    let parsed_file = parse_input_file(config_filename, &buf[..]);
+                    let parsed_file = slurp(&grammar, &buf);
                     do_fuzz(&parsed_file, &pattern, num_iterations, &config);
                     0
                 },

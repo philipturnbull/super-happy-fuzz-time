@@ -19,7 +19,10 @@ static mut FUZZ_CONFIG: Option<fuzz::FuzzConfig> = None;
 #[no_mangle]
 pub unsafe extern fn afl_fuzz_init() -> size_t {
     RNG = Some(isaac::Isaac64Rng::new_unseeded());
-    GRAMMAR = Some(Grammar::from_path("/home/phil/super-happy-fuzz-time/config.yml"));
+    GRAMMAR = match Grammar::from_path("/home/phil/super-happy-fuzz-time/config.yml") {
+        Ok(grammar) => Some(grammar),
+        Err(_) => return 1,
+    };
 
     FUZZ_CONFIG = Some(fuzz::FuzzConfig {
         max_mutations: 5,

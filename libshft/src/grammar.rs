@@ -2,6 +2,7 @@ extern crate serde;
 extern crate serde_yaml;
 
 use std::fs::File;
+use std::io;
 use std::io::Read;
 use std::path::Path;
 
@@ -32,8 +33,8 @@ impl Grammar {
         }
     }
 
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Grammar {
-        let mut f = File::open(path).expect("File::open");
+    pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Grammar> {
+        let mut f = File::open(path)?;
         let mut s = String::new();
         f.read_to_string(&mut s).expect("read_to_string");
 
@@ -54,6 +55,6 @@ impl Grammar {
             defs.push(GrammarDef::Breaker(pattern.into_bytes()))
         }
 
-        Grammar::new(defs, whitespace)
+        Ok(Grammar::new(defs, whitespace))
     }
 }
