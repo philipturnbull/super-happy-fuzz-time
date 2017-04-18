@@ -14,15 +14,18 @@ static mut GRAMMAR: Option<Grammar> = None;
 static mut PARSED_FILE: Option<ParsedFile> = None;
 static mut RNG: Option<isaac::Isaac64Rng> = None;
 
-static FUZZ_CONFIG: fuzz::FuzzConfig = fuzz::FuzzConfig {
-    max_mutations: 5,
-    max_duplications: 5,
-};
+static mut FUZZ_CONFIG: Option<fuzz::FuzzConfig> = None;
 
 #[no_mangle]
 pub unsafe extern fn afl_fuzz_init() -> size_t {
     RNG = Some(isaac::Isaac64Rng::new_unseeded());
     GRAMMAR = Some(Grammar::from_path("/home/phil/super-happy-fuzz-time/config.yml"));
+
+    FUZZ_CONFIG = Some(fuzz::FuzzConfig {
+        max_mutations: 5,
+        max_duplications: 5,
+        valid_actions: fuzz::default_actions(),
+    });
     0
 }
 
@@ -42,7 +45,7 @@ pub unsafe extern fn afl_fuzz_one(out_buf: *mut c_void, out_len: size_t) -> size
     if out_buf.is_null() || out_len == 0 {
         0
     } else {
-        let result = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), &FUZZ_CONFIG);
+        let result = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), FUZZ_CONFIG.as_mut().unwrap());
 
         match result {
             Some(fuzzed_file) => {
