@@ -50,7 +50,7 @@ fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)>
     }
 }
 
-fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(usize, &'buf [u8], RangeRef, &'buf [u8])> {
+fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(NodeRef, &'buf [u8], RangeRef, &'buf [u8])> {
     let delims: Vec<_> = nodes.iter().enumerate().filter_map(|item| {
         match item {
             (index, &Node::Delim(start_pattern, rangeref, end_pattern)) => {
