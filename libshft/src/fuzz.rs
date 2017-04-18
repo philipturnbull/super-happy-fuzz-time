@@ -16,6 +16,7 @@ pub struct FuzzFile<'buf: 'parse, 'parse> {
 pub enum FuzzAction {
     DuplicateRange,
     DuplicateRootNode,
+    EmptyDelim,
     NestDelim,
     RemoveDelim,
     ShuffleRanges,
@@ -33,6 +34,7 @@ impl Rand for FuzzAction {
         let actions = vec![
             FuzzAction::DuplicateRange,
             FuzzAction::DuplicateRootNode,
+            FuzzAction::EmptyDelim,
             FuzzAction::NestDelim,
             FuzzAction::RemoveDelim,
             FuzzAction::ShuffleRanges,
@@ -270,6 +272,22 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
             None => false,
         }
     }
+
+    pub fn empty_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
+        match rand_delim(&mut rng, &self.nodes[..]) {
+            Some((index, start_pattern, _, end_pattern)) => {
+                let mut nodes = self.nodes.to_mut();
+                let mut ranges = self.ranges.to_mut();
+
+                let rangeref = ranges.len();
+                ranges.push(vec![]);
+
+                nodes[index] = Node::Delim(start_pattern, rangeref, end_pattern);
+                true
+            },
+            None => false,
+        }
+    }
 }
 
 pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, config: &FuzzConfig) -> Option<FuzzFile<'buf, 'parse>> {
@@ -279,6 +297,7 @@ pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng:
         did_mutate |= match rng.gen() {
             FuzzAction::DuplicateRange => ff.duplicate_range(&mut rng, config.max_duplications),
             FuzzAction::DuplicateRootNode => ff.duplicate_root_node(&mut rng),
+            FuzzAction::EmptyDelim => ff.empty_delim(&mut rng),
             FuzzAction::NestDelim => ff.nest_delim(&mut rng),
             FuzzAction::RemoveDelim => ff.remove_delim(&mut rng),
             FuzzAction::ShuffleRanges => ff.shuffle_range(&mut rng),
