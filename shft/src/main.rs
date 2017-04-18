@@ -22,30 +22,43 @@ use output::OutputPattern;
 mod test {
     use libshft::grammar::{Grammar, GrammarDef};
     use libshft::parse::slurp;
-    use libshft::fuzz::FuzzFile;
+    use libshft::fuzz::{FuzzFile, SliceSerializer};
 
-    fn roundtrip(grammar: &Grammar, buf: &[u8]) -> bool {
+    fn roundtrip(grammar: &Grammar, buf: &[u8]) {
         let parsed_file = slurp(grammar, buf);
         println!("parsed = {:?}", parsed_file.dump());
         let ff = FuzzFile::new(&parsed_file);
-        let mut serialized = Vec::new();
-        ff.serialize(&mut serialized);
-        println!("serialized = {:#?}", serialized);
-        serialized == buf
+        {
+            let mut serialized = Vec::new();
+            ff.serialize(&mut serialized);
+            println!("serialized_vec = {:#?}", &serialized[..]);
+            assert!(serialized == buf);
+        }
+
+        {
+            let mut serialized = [0; 128];
+            let num_bytes = {
+                let mut serializer = SliceSerializer::new(&mut serialized[..]);
+                ff.serialize(&mut serializer);
+                serializer.bytes_written()
+            };
+            println!("serialized = {:#?}", &serialized[..]);
+            assert!(&serialized[..num_bytes] == buf);
+        }
     }
 
     #[test]
     fn test_whitespace() {
         let grammar = Grammar::new(vec![], vec![b" ".to_vec()]);
         let buf = b"1 2 3";
-        assert!(roundtrip(&grammar, buf))
+        roundtrip(&grammar, buf)
     }
 
     #[test]
     fn test_two_whitespaces() {
         let grammar = Grammar::new(vec![], vec![b" ".to_vec(), b"\r\n".to_vec()]);
         let buf = b"1 2\r\n3 \r\n4";
-        assert!(roundtrip(&grammar, buf))
+        roundtrip(&grammar, buf)
     }
 
     #[test]
@@ -53,11 +66,11 @@ mod test {
         let grammar = Grammar::new(vec![
             GrammarDef::Delim(vec![b'<', b'<'], vec![b'>', b'>']),
         ], vec![]);
-        assert!(roundtrip(&grammar, b"1<<2<<3>>4>>5"));
-        assert!(roundtrip(&grammar, b"1<<2<<3>>4"));
-        assert!(roundtrip(&grammar, b"1<<2>>3>>4"));
-        assert!(roundtrip(&grammar, b"1<<2"));
-        assert!(roundtrip(&grammar, b"1>>2"));
+        roundtrip(&grammar, b"1<<2<<3>>4>>5");
+        roundtrip(&grammar, b"1<<2<<3>>4");
+        roundtrip(&grammar, b"1<<2>>3>>4");
+        roundtrip(&grammar, b"1<<2");
+        roundtrip(&grammar, b"1>>2")
     }
 }
 

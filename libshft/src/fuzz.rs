@@ -1,6 +1,7 @@
 extern crate rand;
 
 use std::borrow::Cow;
+use std::cmp;
 use self::rand::{Rand, Rng};
 use parse::{Node, NodeRef, ParsedFile, RangeRef};
 
@@ -84,6 +85,35 @@ pub trait SerializeInto {
 impl SerializeInto for Vec<u8> {
     fn push(self: &mut Self, token: &[u8]) {
         self.extend(token);
+    }
+}
+
+pub struct SliceSerializer<'buf> {
+    slice: &'buf mut [u8],
+    cur_offset: usize,
+}
+
+impl<'buf> SliceSerializer<'buf> {
+    pub fn new(slice: &'buf mut [u8]) -> SliceSerializer {
+        SliceSerializer {
+            slice: slice,
+            cur_offset: 0,
+        }
+    }
+
+    pub fn bytes_written(self: &Self) -> usize {
+        self.cur_offset
+    }
+}
+
+impl<'buf> SerializeInto for SliceSerializer<'buf> {
+    fn push(self: &mut Self, token: &[u8]) {
+        let remaining = self.slice.len() - self.cur_offset;
+        let num_bytes_to_write = cmp::min(remaining, token.len());
+        if num_bytes_to_write > 0 {
+            self.slice[self.cur_offset..self.cur_offset+num_bytes_to_write].copy_from_slice(&token[..num_bytes_to_write]);
+            self.cur_offset += num_bytes_to_write
+        }
     }
 }
 

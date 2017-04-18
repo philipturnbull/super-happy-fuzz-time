@@ -3,9 +3,8 @@ extern crate libc;
 extern crate rand;
 extern crate libshft;
 
-use libc::{c_void, size_t, memcpy};
+use libc::{c_void, size_t};
 use rand::isaac;
-use std::cmp;
 
 use libshft::grammar::Grammar;
 use libshft::parse::{ParsedFile, slurp};
@@ -38,10 +37,11 @@ pub unsafe extern fn afl_fuzz_one(out_buf: *mut c_void, out_len: size_t) -> size
     if out_buf.is_null() || out_len == 0 {
         0
     } else {
-        let fuzzed = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), 5);
-        let num_bytes = cmp::min(fuzzed.len() as size_t, out_len);
-        let ptr = fuzzed.as_slice().as_ptr() as *const c_void;
-        memcpy(out_buf, ptr, num_bytes);
-        num_bytes
+        let fuzzed_file = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), 5);
+
+        let out_slice = std::slice::from_raw_parts_mut(out_buf as *mut u8, out_len as usize);
+        let mut serialized = fuzz::SliceSerializer::new(out_slice);
+        fuzzed_file.serialize(&mut serialized);
+        serialized.bytes_written()
     }
 }
