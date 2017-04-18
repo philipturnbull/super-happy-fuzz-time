@@ -37,11 +37,16 @@ pub unsafe extern fn afl_fuzz_one(out_buf: *mut c_void, out_len: size_t) -> size
     if out_buf.is_null() || out_len == 0 {
         0
     } else {
-        let fuzzed_file = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), 5);
+        let result = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), 5);
 
-        let out_slice = std::slice::from_raw_parts_mut(out_buf as *mut u8, out_len as usize);
-        let mut serialized = fuzz::SliceSerializer::new(out_slice);
-        fuzzed_file.serialize(&mut serialized);
-        serialized.bytes_written()
+        match result {
+            Some(fuzzed_file) => {
+                let out_slice = std::slice::from_raw_parts_mut(out_buf as *mut u8, out_len as usize);
+                let mut serialized = fuzz::SliceSerializer::new(out_slice);
+                fuzzed_file.serialize(&mut serialized);
+                serialized.bytes_written()
+            },
+            None => 0,
+        }
     }
 }

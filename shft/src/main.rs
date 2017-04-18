@@ -87,14 +87,16 @@ fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, iterations: usize) {
     let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
     for i in 0..iterations {
-        let fuzzed_file = fuzz_one(parsed_file, &mut rng, 5);
+        let result = fuzz_one(parsed_file, &mut rng, 5);
 
-        let mut serialized = Vec::new();
-        fuzzed_file.serialize(&mut serialized);
+        if let Some(fuzzed_file) = result {
+            let mut serialized = Vec::new();
+            fuzzed_file.serialize(&mut serialized);
 
-        let out_filename = pattern.with(i+1);
-        let mut file = File::create(out_filename).expect("oops");
-        file.write_all(&serialized[..]).expect("oops")
+            let out_filename = pattern.with(i+1);
+            let mut file = File::create(out_filename).expect("oops");
+            file.write_all(&serialized[..]).expect("oops")
+        }
     }
 }
 

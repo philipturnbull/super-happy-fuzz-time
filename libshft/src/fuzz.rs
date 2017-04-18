@@ -158,68 +158,93 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
         }
     }
 
-    pub fn swap_ranges<R: Rng>(self: &mut Self, rng: &mut R) {
-        if self.ranges.len() > 1 {
-            let mut ranges = self.ranges.to_mut();
-            let (index0, index1) = rand_indices::<R, _>(rng, ranges);
-            ranges.swap(index0, index1);
-        }
-    }
-
-    pub fn shuffle_range<R: Rng>(self: &mut Self, rng: &mut R) {
-        if let Some(range) = rng.choose_mut(self.ranges.to_mut()) {
-            rng.shuffle(range)
-        }
-    }
-
-    pub fn duplicate_range<R: Rng>(self: &mut Self, rng: &mut R) {
-        if let Some(range) = rng.choose_mut(self.ranges.to_mut()) {
-            let num_duplications = rng.gen_range(1, 4);
-            let mut extension = Vec::new();
-            for _ in 0..num_duplications {
-                extension.extend(&range[..])
+    pub fn swap_ranges<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
+        match self.ranges.len() {
+            0 => false,
+            _ => {
+                let mut ranges = self.ranges.to_mut();
+                let (index0, index1) = rand_indices::<R, _>(rng, ranges);
+                ranges.swap(index0, index1);
+                true
             }
-            range.extend(&extension[..])
         }
     }
 
-    pub fn duplicate_root_node<R: Rng>(self: &mut Self, rng: &mut R) {
-        if self.nodes.len() > 1 {
-            let mut nodes = self.nodes.to_mut();
-            let (src_index, dst_index) = rand_indices::<R, _>(rng, nodes);
-
-            let dup_node = nodes[dst_index].clone();
-            let noderef = nodes.len();
-            nodes.push(dup_node);
-
-            let ranges = self.ranges.to_mut();
-            let range = vec![noderef, src_index];
-            let rangeref = ranges.len();
-            ranges.push(range);
-
-            nodes[dst_index] = Node::Range(rangeref);
+    pub fn shuffle_range<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
+        match rng.choose_mut(self.ranges.to_mut()) {
+            Some(range) => {
+                rng.shuffle(range);
+                true
+            },
+            None => false,
         }
     }
 
-    pub fn remove_delim<R: Rng>(self: &mut Self, mut rng: &mut R) {
-        if let Some((index, _, rangeref, _)) = rand_delim(&mut rng, &self.nodes[..]) {
-            let mut nodes = self.nodes.to_mut();
-            nodes[index] = Node::Range(rangeref);
+    pub fn duplicate_range<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
+        match rng.choose_mut(self.ranges.to_mut()) {
+            Some(range) => {
+                let num_duplications = rng.gen_range(1, 4);
+                let mut extension = Vec::new();
+                for _ in 0..num_duplications {
+                    extension.extend(&range[..])
+                }
+                range.extend(&extension[..]);
+                true
+            },
+            None => false,
         }
     }
 
-    pub fn swap_delim<R: Rng>(self: &mut Self, mut rng: &mut R) {
-        if let Some((index, start_pattern, rangeref, end_pattern)) = rand_delim(&mut rng, &self.nodes[..]) {
-            let mut nodes = self.nodes.to_mut();
-            nodes[index] = Node::Delim(end_pattern, rangeref, start_pattern);
+    pub fn duplicate_root_node<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
+        match self.nodes.len() {
+            0 => false,
+            _ => {
+                let mut nodes = self.nodes.to_mut();
+                let (src_index, dst_index) = rand_indices::<R, _>(rng, nodes);
+
+                let dup_node = nodes[dst_index].clone();
+                let noderef = nodes.len();
+                nodes.push(dup_node);
+
+                let ranges = self.ranges.to_mut();
+                let range = vec![noderef, src_index];
+                let rangeref = ranges.len();
+                ranges.push(range);
+
+                nodes[dst_index] = Node::Range(rangeref);
+                true
+            }
+        }
+    }
+
+    pub fn remove_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
+        match rand_delim(&mut rng, &self.nodes[..]) {
+            Some((index, _, rangeref, _)) => {
+                let mut nodes = self.nodes.to_mut();
+                nodes[index] = Node::Range(rangeref);
+                true
+            },
+            None => false,
+        }
+    }
+
+    pub fn swap_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
+        match rand_delim(&mut rng, &self.nodes[..]) {
+            Some((index, start_pattern, rangeref, end_pattern)) => {
+                let mut nodes = self.nodes.to_mut();
+                nodes[index] = Node::Delim(end_pattern, rangeref, start_pattern);
+                true
+            },
+            None => false,
         }
     }
 }
 
-pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> FuzzFile<'buf, 'parse> {
+pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> Option<FuzzFile<'buf, 'parse>> {
     let mut ff = FuzzFile::new(parsed);
+    let mut did_mutate = false;
     for _ in 0..mutations {
-        match rng.gen() {
+        did_mutate |= match rng.gen() {
             FuzzAction::DuplicateRange => ff.duplicate_range(&mut rng),
             FuzzAction::DuplicateRootNode => ff.duplicate_root_node(&mut rng),
             FuzzAction::RemoveDelim => ff.remove_delim(&mut rng),
@@ -229,5 +254,9 @@ pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng:
         }
     }
 
-    ff
+    if did_mutate {
+        Some(ff)
+    } else {
+        None
+    }
 }
