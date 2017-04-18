@@ -36,9 +36,13 @@ impl Rand for FuzzAction {
     }
 }
 
-fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> (usize, usize) {
-    let indices = rand::sample(&mut rng, 0..x.len(), 2);
-    (indices[0], indices[1])
+fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)> {
+    if x.len() > 1 {
+        let indices = rand::sample(&mut rng, 0..x.len(), 2);
+        Some((indices[0], indices[1]))
+    } else {
+        None
+    }
 }
 
 fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(usize, &'buf [u8], RangeRef, &'buf [u8])> {
@@ -159,14 +163,13 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
     }
 
     pub fn swap_ranges<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
-        match self.ranges.len() {
-            0 => false,
-            _ => {
+        match rand_indices::<R, _>(rng, &self.ranges[..]) {
+            Some((index0, index1)) => {
                 let mut ranges = self.ranges.to_mut();
-                let (index0, index1) = rand_indices::<R, _>(rng, ranges);
                 ranges.swap(index0, index1);
                 true
-            }
+            },
+            None => false,
         }
     }
 
@@ -196,11 +199,9 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
     }
 
     pub fn duplicate_root_node<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
-        match self.nodes.len() {
-            0 => false,
-            _ => {
+        match rand_indices::<R, _>(rng, &self.ranges[..]) {
+            Some((src_index, dst_index)) => {
                 let mut nodes = self.nodes.to_mut();
-                let (src_index, dst_index) = rand_indices::<R, _>(rng, nodes);
 
                 let dup_node = nodes[dst_index].clone();
                 let noderef = nodes.len();
@@ -213,7 +214,8 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
                 nodes[dst_index] = Node::Range(rangeref);
                 true
-            }
+            },
+            None => false,
         }
     }
 
