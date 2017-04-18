@@ -13,7 +13,7 @@ pub struct FuzzFile<'buf: 'parse, 'parse> {
 }
 
 #[derive(Clone)]
-pub enum FuzzAction {
+pub enum Mutation {
     DuplicateRange,
     DuplicateRootNode,
     EmptyDelim,
@@ -24,23 +24,23 @@ pub enum FuzzAction {
     SwapRanges,
 }
 
-pub fn default_actions() -> Vec<FuzzAction> {
+pub fn default_mutations() -> Vec<Mutation> {
     vec![
-        FuzzAction::DuplicateRange,
-        FuzzAction::DuplicateRootNode,
-        FuzzAction::EmptyDelim,
-        FuzzAction::NestDelim,
-        FuzzAction::RemoveDelim,
-        FuzzAction::ShuffleRanges,
-        FuzzAction::SwapDelim,
-        FuzzAction::SwapRanges,
+        Mutation::DuplicateRange,
+        Mutation::DuplicateRootNode,
+        Mutation::EmptyDelim,
+        Mutation::NestDelim,
+        Mutation::RemoveDelim,
+        Mutation::ShuffleRanges,
+        Mutation::SwapDelim,
+        Mutation::SwapRanges,
     ]
 }
 
 pub struct FuzzConfig {
     pub max_mutations: usize,
     pub max_duplications: usize,
-    pub valid_actions: Vec<FuzzAction>,
+    pub valid_actions: Vec<Mutation>,
 }
 
 fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)> {
@@ -293,14 +293,14 @@ pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng:
     let mut did_mutate = false;
     for _ in 0..config.max_mutations {
         did_mutate |= match rng.choose(&config.valid_actions[..]) {
-            Some(&FuzzAction::DuplicateRange) => ff.duplicate_range(&mut rng, config.max_duplications),
-            Some(&FuzzAction::DuplicateRootNode) => ff.duplicate_root_node(&mut rng),
-            Some(&FuzzAction::EmptyDelim) => ff.empty_delim(&mut rng),
-            Some(&FuzzAction::NestDelim) => ff.nest_delim(&mut rng),
-            Some(&FuzzAction::RemoveDelim) => ff.remove_delim(&mut rng),
-            Some(&FuzzAction::ShuffleRanges) => ff.shuffle_range(&mut rng),
-            Some(&FuzzAction::SwapDelim) => ff.swap_delim(&mut rng),
-            Some(&FuzzAction::SwapRanges) => ff.swap_ranges(&mut rng),
+            Some(&Mutation::DuplicateRange) => ff.duplicate_range(&mut rng, config.max_duplications),
+            Some(&Mutation::DuplicateRootNode) => ff.duplicate_root_node(&mut rng),
+            Some(&Mutation::EmptyDelim) => ff.empty_delim(&mut rng),
+            Some(&Mutation::NestDelim) => ff.nest_delim(&mut rng),
+            Some(&Mutation::RemoveDelim) => ff.remove_delim(&mut rng),
+            Some(&Mutation::ShuffleRanges) => ff.shuffle_range(&mut rng),
+            Some(&Mutation::SwapDelim) => ff.swap_delim(&mut rng),
+            Some(&Mutation::SwapRanges) => ff.swap_ranges(&mut rng),
             None => false,
         }
     }

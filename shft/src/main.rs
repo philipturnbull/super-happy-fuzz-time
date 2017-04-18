@@ -172,7 +172,7 @@ fn go() -> i32 {
                     let config = fuzz::FuzzConfig {
                         max_mutations: 5,
                         max_duplications: 5,
-                        valid_actions: fuzz::default_actions(),
+                        valid_actions: fuzz::default_mutations(),
                     };
                     let buf = read_file(input_filename).expect("read_file");
                     let parsed_file = parse_input_file(config_filename, &buf[..]);

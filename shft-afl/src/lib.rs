@@ -24,7 +24,7 @@ pub unsafe extern fn afl_fuzz_init() -> size_t {
     FUZZ_CONFIG = Some(fuzz::FuzzConfig {
         max_mutations: 5,
         max_duplications: 5,
-        valid_actions: fuzz::default_actions(),
+        valid_actions: fuzz::default_mutations(),
     });
     0
 }
