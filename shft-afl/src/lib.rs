@@ -14,6 +14,11 @@ static mut GRAMMAR: Option<Grammar> = None;
 static mut PARSED_FILE: Option<ParsedFile> = None;
 static mut RNG: Option<isaac::Isaac64Rng> = None;
 
+static FUZZ_CONFIG: fuzz::FuzzConfig = fuzz::FuzzConfig {
+    max_mutations: 5,
+    max_duplications: 5,
+};
+
 #[no_mangle]
 pub unsafe extern fn afl_fuzz_init() -> size_t {
     RNG = Some(isaac::Isaac64Rng::new_unseeded());
@@ -37,7 +42,7 @@ pub unsafe extern fn afl_fuzz_one(out_buf: *mut c_void, out_len: size_t) -> size
     if out_buf.is_null() || out_len == 0 {
         0
     } else {
-        let result = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), 5);
+        let result = fuzz::fuzz_one(PARSED_FILE.as_mut().unwrap(), RNG.as_mut().unwrap(), &FUZZ_CONFIG);
 
         match result {
             Some(fuzzed_file) => {

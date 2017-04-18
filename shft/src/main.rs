@@ -15,7 +15,7 @@ use std::process;
 use std::str::FromStr;
 use libshft::grammar::Grammar;
 use libshft::parse::{ParsedFile, slurp};
-use libshft::fuzz::fuzz_one;
+use libshft::fuzz;
 use output::OutputPattern;
 
 #[cfg(test)]
@@ -84,10 +84,10 @@ fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
     }
 }
 
-fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, iterations: usize) {
+fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, num_iterations: usize, config: &fuzz::FuzzConfig) {
     let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
-    for i in 0..iterations {
-        let result = fuzz_one(parsed_file, &mut rng, 5);
+    for i in 0..num_iterations {
+        let result = fuzz::fuzz_one(parsed_file, &mut rng, config);
 
         if let Some(fuzzed_file) = result {
             let mut serialized = Vec::new();
@@ -169,9 +169,13 @@ fn go() -> i32 {
             };
             match OutputPattern::from_path(output) {
                 Some(pattern) => {
+                    let config = fuzz::FuzzConfig {
+                        max_mutations: 5,
+                        max_duplications: 5,
+                    };
                     let buf = read_file(input_filename).expect("read_file");
                     let parsed_file = parse_input_file(config_filename, &buf[..]);
-                    do_fuzz(&parsed_file, &pattern, num_iterations);
+                    do_fuzz(&parsed_file, &pattern, num_iterations, &config);
                     0
                 },
                 None => {

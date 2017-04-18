@@ -22,6 +22,11 @@ pub enum FuzzAction {
     SwapRanges,
 }
 
+pub struct FuzzConfig {
+    pub max_mutations: usize,
+    pub max_duplications: usize,
+}
+
 impl Rand for FuzzAction {
     fn rand<R: Rng>(rng: &mut R) -> Self {
         let actions = vec![
@@ -183,10 +188,14 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
         }
     }
 
-    pub fn duplicate_range<R: Rng>(self: &mut Self, rng: &mut R) -> bool {
+    pub fn duplicate_range<R: Rng>(self: &mut Self, rng: &mut R, max_duplications: usize) -> bool {
+        if max_duplications < 1 {
+            return false
+        }
+
         match rng.choose_mut(self.ranges.to_mut()) {
             Some(range) => {
-                let num_duplications = rng.gen_range(1, 4);
+                let num_duplications = rng.gen_range(1, max_duplications);
                 let mut extension = Vec::new();
                 for _ in 0..num_duplications {
                     extension.extend(&range[..])
@@ -242,12 +251,12 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
     }
 }
 
-pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, mutations: usize) -> Option<FuzzFile<'buf, 'parse>> {
+pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, config: &FuzzConfig) -> Option<FuzzFile<'buf, 'parse>> {
     let mut ff = FuzzFile::new(parsed);
     let mut did_mutate = false;
-    for _ in 0..mutations {
+    for _ in 0..config.max_mutations {
         did_mutate |= match rng.gen() {
-            FuzzAction::DuplicateRange => ff.duplicate_range(&mut rng),
+            FuzzAction::DuplicateRange => ff.duplicate_range(&mut rng, config.max_duplications),
             FuzzAction::DuplicateRootNode => ff.duplicate_root_node(&mut rng),
             FuzzAction::RemoveDelim => ff.remove_delim(&mut rng),
             FuzzAction::ShuffleRanges => ff.shuffle_range(&mut rng),
