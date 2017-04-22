@@ -1,8 +1,9 @@
 extern crate serde;
 extern crate serde_yaml;
 
+use error::*;
+use std::fmt::Display;
 use std::fs::File;
-use std::io;
 use std::path::Path;
 
 #[derive(Deserialize)]
@@ -32,9 +33,9 @@ impl Grammar {
         }
     }
 
-    pub fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Grammar> {
-        let f = File::open(path)?;
-        let cfg = serde_yaml::from_reader::<_, ConfigFormat>(f).unwrap();
+    pub fn from_path<P: AsRef<Path> + Display>(path: P) -> Result<Grammar> {
+        let f = File::open(&path).chain_err(|| format!("Failed to open grammar definition {}", path))?;
+        let cfg = serde_yaml::from_reader::<_, ConfigFormat>(f).chain_err(|| "Failed to parse grammar defintion")?;
 
         let mut defs = Vec::new();
         let mut whitespace = Vec::new();

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate error_chain;
+
 extern crate clap;
 extern crate rand;
 extern crate libshft;
@@ -7,12 +10,12 @@ mod output;
 use clap::{Arg, ArgMatches, App, SubCommand};
 use rand::SeedableRng;
 use rand::isaac;
-use std::io;
 use std::io::{Read, Write};
+use std::fmt::Display;
 use std::fs::File;
 use std::path::Path;
-use std::process;
 use std::str::FromStr;
+use libshft::error::*;
 use libshft::grammar::Grammar;
 use libshft::parse::{ParsedFile, slurp};
 use libshft::fuzz;
@@ -74,17 +77,15 @@ mod test {
     }
 }
 
-fn read_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    let mut f = File::open(path)?;
+fn read_file<P: AsRef<Path> + Display>(path: P) -> Result<Vec<u8>> {
+    let mut f = File::open(&path).chain_err(|| format!("Could not open input file {}", path))?;
     let mut buffer = Vec::new();
 
-    match f.read_to_end(&mut buffer) {
-        Ok(_) => Ok(buffer),
-        Err(err) => Err(err),
-    }
+    f.read_to_end(&mut buffer).chain_err(|| format!("Could not read input file {}", path))?;
+    Ok(buffer)
 }
 
-fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, num_iterations: usize, config: &fuzz::FuzzConfig) {
+fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, num_iterations: usize, config: &fuzz::FuzzConfig) -> Result<()> {
     let mut rng = isaac::Isaac64Rng::from_seed(&[1, 2, 3, 4]);
     for i in 0..num_iterations {
         let result = fuzz::fuzz_one(parsed_file, &mut rng, config);
@@ -94,24 +95,18 @@ fn do_fuzz<'buf>(parsed_file: &ParsedFile<'buf>, pattern: &OutputPattern, num_it
             fuzzed_file.serialize(&mut serialized);
 
             let out_filename = pattern.with(i+1);
-            let mut file = File::create(out_filename).expect("oops");
-            file.write_all(&serialized[..]).expect("oops")
+            let mut file = File::create(&out_filename).chain_err(|| format!("Could not create output file {:?}", out_filename))?;
+            file.write_all(&serialized[..]).chain_err(|| format!("Could not write output file {:?}", out_filename))?;
         }
     }
-}
-
-fn die<S: AsRef<str>>(app: &App, msg: S) -> i32 {
-    let mut out = io::stdout();
-    app.write_help(&mut out).expect("app.write_help");
-    write!(out, "\n\n{}\n", msg.as_ref()).expect("write newline");
-    1
+    Ok(())
 }
 
 fn lookup<'a>(matches: &'a ArgMatches, key: &str) -> &'a str {
     matches.value_of(key).expect("impossible")
 }
 
-fn go() -> i32 {
+fn go() -> Result<()> {
     let app = App::new("super-happy-fuzz-time")
         .arg(Arg::with_name("INPUT")
             .help("File to fuzz")
@@ -149,47 +144,41 @@ fn go() -> i32 {
     let config_filename = lookup(&matches, "CONFIG");
     let input_filename = lookup(&matches, "INPUT");
 
-    let grammar = match Grammar::from_path(config_filename) {
-        Ok(grammar) => grammar,
-        Err(err) => return die(&app, format!("Could not parse {}: {}", config_filename, err)),
-    };
+    let grammar = Grammar::from_path(config_filename).chain_err(|| format!("Could not load config {}", config_filename))?;
 
     match matches.subcommand() {
         ("dump", _) => {
-            let buf = read_file(input_filename).expect("read_file");
+            let buf = read_file(input_filename)?;
             let parsed_file = slurp(&grammar, &buf);
             println!("{}", parsed_file.dump());
-            0
         },
         ("fuzz", Some(fuzz_matches)) => {
             let output = lookup(fuzz_matches, "OUTPUT");
-            let num_iterations = match usize::from_str(lookup(fuzz_matches, "ITERATIONS")) {
-                Ok(n) => n,
-                Err(err) => return die(&app, format!("Invalid iterations: {}", err)),
+            let iterations = lookup(fuzz_matches, "ITERATIONS");
+            let num_iterations = usize::from_str(iterations).chain_err(|| format!("Invalid iterations: {}", iterations))?;
+            let pattern = OutputPattern::from_path(output).ok_or(format!("Invalid output pattern: {}", output))?;
+            let config = fuzz::FuzzConfig {
+                max_mutations: 5,
+                max_duplications: 5,
+                valid_actions: fuzz::default_mutations(),
             };
-            match OutputPattern::from_path(output) {
-                Some(pattern) => {
-                    let config = fuzz::FuzzConfig {
-                        max_mutations: 5,
-                        max_duplications: 5,
-                        valid_actions: fuzz::default_mutations(),
-                    };
-                    let buf = read_file(input_filename).expect("read_file");
-                    let parsed_file = slurp(&grammar, &buf);
-                    do_fuzz(&parsed_file, &pattern, num_iterations, &config);
-                    0
-                },
-                None => {
-                    die(&app, format!("'{}' is an invalid output pattern", output))
-                }
-            }
+            let buf = read_file(input_filename)?;
+            let parsed_file = slurp(&grammar, &buf);
+            do_fuzz(&parsed_file, &pattern, num_iterations, &config).chain_err(|| "Error fuzzing input file")?;
         },
         _ => {
-            die(&app, "Must provide 'dump' or 'fuzz'")
+            bail!("Must provide 'dump' or 'fuzz'");
         },
     }
+    Ok(())
 }
 
 fn main() {
-    process::exit(go());
+    if let Err(ref e) = go() {
+        println!("error: {}", e);
+        for e in e.iter().skip(1) {
+            println!("caused by: {}", e);
+        }
+        std::process::exit(1);
+    }
 }
