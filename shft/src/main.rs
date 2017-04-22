@@ -156,7 +156,7 @@ fn go() -> Result<()> {
             let output = lookup(fuzz_matches, "OUTPUT");
             let iterations = lookup(fuzz_matches, "ITERATIONS");
             let num_iterations = usize::from_str(iterations).chain_err(|| format!("Invalid iterations: {}", iterations))?;
-            let pattern = OutputPattern::from_path(output).ok_or(format!("Invalid output pattern: {}", output))?;
+            let pattern = OutputPattern::from_path(output).chain_err(|| format!("Invalid output pattern: {}", output))?;
             let config = fuzz::FuzzConfig {
                 max_mutations: 5,
                 max_duplications: 5,
