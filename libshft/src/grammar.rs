@@ -19,6 +19,21 @@ pub enum GrammarDef {
     Delim(Vec<u8>, Vec<u8>),
 }
 
+#[derive(Clone, PartialEq)]
+pub struct Delim<'buf> {
+    pub start_pattern: &'buf [u8],
+    pub end_pattern: &'buf [u8],
+}
+
+impl<'buf> Delim<'buf> {
+    pub fn new(start_pattern: &'buf [u8], end_pattern: &'buf [u8]) -> Self {
+        Delim {
+            start_pattern: start_pattern,
+            end_pattern: end_pattern,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Grammar {
     pub defs: Vec<GrammarDef>,
@@ -55,10 +70,10 @@ impl Grammar {
         Ok(Grammar::new(defs, whitespace))
     }
 
-    pub fn delims(self: &Self) -> Vec<(Vec<u8>, Vec<u8>)> {
+    pub fn delims<'g>(self: &'g Self) -> Vec<Delim<'g>> {
         self.defs.iter().filter_map(|def| {
             match def {
-                &GrammarDef::Delim(ref start_pattern, ref end_pattern) => Some((start_pattern.clone(), end_pattern.clone())),
+                &GrammarDef::Delim(ref start_pattern, ref end_pattern) => Some(Delim::new(&start_pattern[..], &end_pattern[..])),
                 _ => None,
             }
         }).collect()

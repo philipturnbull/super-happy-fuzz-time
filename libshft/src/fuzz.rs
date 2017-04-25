@@ -3,6 +3,7 @@ extern crate rand;
 use std::borrow::Cow;
 use std::cmp;
 use self::rand::Rng;
+use grammar::Delim;
 use parse::{Node, NodeRef, ParsedFile, RangeRef};
 
 #[derive(Debug)]
@@ -39,11 +40,11 @@ pub fn default_mutations() -> Vec<Mutation> {
     ]
 }
 
-pub struct FuzzConfig {
+pub struct FuzzConfig<'buf> {
     pub max_mutations: usize,
     pub max_duplications: usize,
     pub valid_actions: Vec<Mutation>,
-    pub all_delims: Vec<(Vec<u8>, Vec<u8>)>,
+    pub all_delims: Vec<Delim<'buf>>,
 }
 
 fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)> {
@@ -55,11 +56,11 @@ fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)>
     }
 }
 
-fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(NodeRef, &'buf [u8], RangeRef, &'buf [u8])> {
+fn rand_delim<'buf, R: Rng>(mut rng: &mut R, nodes: &[Node<'buf>]) -> Option<(NodeRef, Delim<'buf>, RangeRef)> {
     let delims: Vec<_> = nodes.iter().enumerate().filter_map(|item| {
         match item {
-            (index, &Node::Delim(start_pattern, rangeref, end_pattern)) => {
-                Some((index, start_pattern, rangeref, end_pattern))
+            (index, &Node::Delim(ref delim, rangeref)) => {
+                Some((index, delim.clone(), rangeref))
             },
             _ => None,
         }
@@ -142,15 +143,15 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
     fn serialize_noderef<S: SerializeInto>(self: &Self, noderef: NodeRef, mut state: &mut SerializeState, mut out: &mut S) {
         match self.nodes[noderef] {
-            Node::Delim(prefix, rangeref, postfix) => {
-                out.push(prefix);
+            Node::Delim(ref delim, rangeref) => {
+                out.push(delim.start_pattern);
                 if state.should_serialize(rangeref) {
                     for noderef in &self.ranges[rangeref] {
                         self.serialize_noderef(*noderef, &mut state, out)
                     }
                     state.reset(rangeref);
                 }
-                out.push(postfix);
+                out.push(delim.end_pattern);
             },
             Node::Range(rangeref) => {
                 if state.should_serialize(rangeref) {
@@ -235,7 +236,7 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
     pub fn remove_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
         match rand_delim(&mut rng, &self.nodes[..]) {
-            Some((index, _, rangeref, _)) => {
+            Some((index, _, rangeref)) => {
                 let mut nodes = self.nodes.to_mut();
                 nodes[index] = Node::Range(rangeref);
                 true
@@ -246,9 +247,10 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
     pub fn swap_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
         match rand_delim(&mut rng, &self.nodes[..]) {
-            Some((index, start_pattern, rangeref, end_pattern)) => {
+            Some((index, delim, rangeref)) => {
                 let mut nodes = self.nodes.to_mut();
-                nodes[index] = Node::Delim(end_pattern, rangeref, start_pattern);
+                let delim = Delim::new(delim.end_pattern, delim.start_pattern);
+                nodes[index] = Node::Delim(delim, rangeref);
                 true
             },
             None => false,
@@ -257,17 +259,17 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
     pub fn nest_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
         match rand_delim(&mut rng, &self.nodes[..]) {
-            Some((index, start_pattern, rangeref, end_pattern)) => {
+            Some((index, ref delim, rangeref)) => {
                 let mut nodes = self.nodes.to_mut();
                 let mut ranges = self.ranges.to_mut();
 
                 let nested_noderef = nodes.len();
-                nodes.push(Node::Delim(start_pattern, rangeref, end_pattern));
+                nodes.push(Node::Delim(delim.clone(), rangeref));
 
                 let nested_rangeref = ranges.len();
                 ranges.push(vec![nested_noderef]);
 
-                nodes[index] = Node::Delim(start_pattern, nested_rangeref, end_pattern);
+                nodes[index] = Node::Delim(delim.clone(), nested_rangeref);
                 true
             },
             None => false,
@@ -276,32 +278,32 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
 
     pub fn empty_delim<R: Rng>(self: &mut Self, mut rng: &mut R) -> bool {
         match rand_delim(&mut rng, &self.nodes[..]) {
-            Some((index, start_pattern, _, end_pattern)) => {
+            Some((index, delim, _)) => {
                 let mut nodes = self.nodes.to_mut();
                 let mut ranges = self.ranges.to_mut();
 
                 let rangeref = ranges.len();
                 ranges.push(vec![]);
 
-                nodes[index] = Node::Delim(start_pattern, rangeref, end_pattern);
+                nodes[index] = Node::Delim(delim, rangeref);
                 true
             },
             None => false,
         }
     }
 
-    pub fn rand_delim<R: Rng>(self: &mut Self, mut rng: &mut R, delims: &'buf [(Vec<u8>, Vec<u8>)]) -> bool {
+    pub fn rand_delim<R: Rng>(self: &mut Self, mut rng: &mut R, delims: &[Delim<'buf>]) -> bool {
         if delims.is_empty() {
             return false
         }
 
         match rand_delim(&mut rng, &self.nodes[..]) {
-            Some((index, start_pattern, rangeref, end_pattern)) => {
+            Some((index, ref delim, rangeref)) => {
                 match rng.choose(&delims[..]) {
-                    Some(&(ref new_start_pattern, ref new_end_pattern)) => {
-                        if *new_start_pattern != start_pattern || *new_end_pattern != end_pattern {
+                    Some(&ref new_delim) => {
+                        if new_delim != delim {
                             let mut nodes = self.nodes.to_mut();
-                            nodes[index] = Node::Delim(&new_start_pattern[..], rangeref, &new_end_pattern[..]);
+                            nodes[index] = Node::Delim(new_delim.clone(), rangeref);
                             true
                         } else {
                             false

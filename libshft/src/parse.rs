@@ -1,4 +1,4 @@
-use grammar::{Grammar, GrammarDef};
+use grammar::{Delim, Grammar, GrammarDef};
 use std::fmt;
 
 pub type NodeRef = usize;
@@ -14,7 +14,7 @@ enum Match<'buf> {
 
 #[derive(Clone)]
 pub enum Node<'buf> {
-    Delim(&'buf [u8], RangeRef, &'buf [u8]),
+    Delim(Delim<'buf>, RangeRef),
     Range(RangeRef),
     Token(&'buf [u8]),
 }
@@ -40,11 +40,11 @@ fn fmt_token(f: &mut fmt::Write, token: &[u8]) -> fmt::Result {
 impl<'buf> fmt::Debug for Node<'buf> {
     fn fmt(self: &Self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Node::Delim(prefix, rangeref, postfix) => {
+            Node::Delim(ref delim, rangeref) => {
                 write!(f, "Delim(")?;
-                fmt_token(f, prefix)?;
+                fmt_token(f, delim.start_pattern)?;
                 write!(f, ", {}, ", rangeref)?;
-                fmt_token(f, postfix)?;
+                fmt_token(f, delim.end_pattern)?;
                 write!(f, ")")
             },
             Node::Range(rangeref) => {
@@ -68,15 +68,15 @@ pub struct ParsedFile<'buf> {
 impl<'buf> ParsedFile<'buf> {
     fn dump_noderef(self: &Self, indent: usize, noderef: NodeRef, f: &mut fmt::Write) -> fmt::Result {
         match self.nodes[noderef] {
-            Node::Delim(prefix, rangeref, postfix) => {
+            Node::Delim(ref delim, rangeref) => {
                 write!(f, "{:indent$}", "", indent=indent)?;
-                fmt_token(f, prefix)?;
+                fmt_token(f, delim.start_pattern)?;
                 writeln!(f, " {{")?;
                 for noderef in &self.ranges[rangeref] {
                     self.dump_noderef(indent + 4, *noderef, f)?
                 }
                 write!(f, "{:indent$}}} ", "", indent=indent)?;
-                fmt_token(f, postfix)?;
+                fmt_token(f, delim.end_pattern)?;
                 writeln!(f, "")
             },
             Node::Range(rangeref) => {
@@ -196,7 +196,7 @@ impl<'buf> TreeBuilder<'buf> {
         match self.state_with_end_pattern(end_pattern) {
             Some(state) => {
                 let rangeref = self.push_range(state.range);
-                let noderef = self.push_node(Node::Delim(state.start_pattern, rangeref, end_pattern));
+                let noderef = self.push_node(Node::Delim(Delim::new(state.start_pattern, end_pattern), rangeref));
                 self.add_node_ref(noderef)
             },
             None => {
