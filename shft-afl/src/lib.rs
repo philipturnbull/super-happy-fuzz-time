@@ -28,6 +28,7 @@ pub unsafe extern fn afl_fuzz_init() -> size_t {
         max_mutations: 5,
         max_duplications: 5,
         valid_actions: fuzz::default_mutations(),
+        all_delims: GRAMMAR.as_ref().unwrap().delims()
     });
     0
 }

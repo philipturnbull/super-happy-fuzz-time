@@ -161,6 +161,7 @@ fn go() -> Result<()> {
                 max_mutations: 5,
                 max_duplications: 5,
                 valid_actions: fuzz::default_mutations(),
+                all_delims: grammar.delims(),
             };
             let buf = read_file(input_filename)?;
             let parsed_file = slurp(&grammar, &buf);

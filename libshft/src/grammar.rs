@@ -54,4 +54,13 @@ impl Grammar {
 
         Ok(Grammar::new(defs, whitespace))
     }
+
+    pub fn delims(self: &Self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        self.defs.iter().filter_map(|def| {
+            match def {
+                &GrammarDef::Delim(ref start_pattern, ref end_pattern) => Some((start_pattern.clone(), end_pattern.clone())),
+                _ => None,
+            }
+        }).collect()
+    }
 }

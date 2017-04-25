@@ -18,6 +18,7 @@ pub enum Mutation {
     DuplicateRootNode,
     EmptyDelim,
     NestDelim,
+    RandDelim,
     RemoveDelim,
     ShuffleRanges,
     SwapDelim,
@@ -30,6 +31,7 @@ pub fn default_mutations() -> Vec<Mutation> {
         Mutation::DuplicateRootNode,
         Mutation::EmptyDelim,
         Mutation::NestDelim,
+        Mutation::RandDelim,
         Mutation::RemoveDelim,
         Mutation::ShuffleRanges,
         Mutation::SwapDelim,
@@ -41,6 +43,7 @@ pub struct FuzzConfig {
     pub max_mutations: usize,
     pub max_duplications: usize,
     pub valid_actions: Vec<Mutation>,
+    pub all_delims: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 fn rand_indices<R: Rng, T>(mut rng: &mut Rng, x: &[T]) -> Option<(usize, usize)> {
@@ -286,9 +289,35 @@ impl<'buf, 'parse> FuzzFile<'buf, 'parse> {
             None => false,
         }
     }
+
+    pub fn rand_delim<R: Rng>(self: &mut Self, mut rng: &mut R, delims: &'buf [(Vec<u8>, Vec<u8>)]) -> bool {
+        if delims.is_empty() {
+            return false
+        }
+
+        match rand_delim(&mut rng, &self.nodes[..]) {
+            Some((index, start_pattern, rangeref, end_pattern)) => {
+                match rng.choose(&delims[..]) {
+                    Some(&(ref new_start_pattern, ref new_end_pattern)) => {
+                        if *new_start_pattern != start_pattern || *new_end_pattern != end_pattern {
+                            let mut nodes = self.nodes.to_mut();
+                            nodes[index] = Node::Delim(&new_start_pattern[..], rangeref, &new_end_pattern[..]);
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    None => {
+                        false
+                    }
+                }
+            },
+            None => false,
+        }
+    }
 }
 
-pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, config: &FuzzConfig) -> Option<FuzzFile<'buf, 'parse>> {
+pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng: &mut R, config: &'buf FuzzConfig) -> Option<FuzzFile<'buf, 'parse>> {
     let mut ff = FuzzFile::new(parsed);
     let mut did_mutate = false;
     for _ in 0..config.max_mutations {
@@ -297,6 +326,7 @@ pub fn fuzz_one<'buf, 'parse, R: Rng>(parsed: &'parse ParsedFile<'buf>, mut rng:
             Some(&Mutation::DuplicateRootNode) => ff.duplicate_root_node(&mut rng),
             Some(&Mutation::EmptyDelim) => ff.empty_delim(&mut rng),
             Some(&Mutation::NestDelim) => ff.nest_delim(&mut rng),
+            Some(&Mutation::RandDelim) => ff.rand_delim(&mut rng, &config.all_delims[..]),
             Some(&Mutation::RemoveDelim) => ff.remove_delim(&mut rng),
             Some(&Mutation::ShuffleRanges) => ff.shuffle_range(&mut rng),
             Some(&Mutation::SwapDelim) => ff.swap_delim(&mut rng),
